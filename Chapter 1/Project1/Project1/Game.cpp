@@ -1,20 +1,25 @@
 #include "Game.h"
+const int thickness = 15;
+const float paddleH = 100.0f;
+
+Game::Game() : 
+	mWindow(nullptr), 
+	mRenderer(nullptr), 
+	mTicksCount(0), 
+	mPaddleDir(0),
+	mIsRunning(true)
+{}
+
+	//mBallPos = { 
+	//	1024 / 2, // x position
+	//	768 / 2   // y position
+	//};
+	//mPaddlePos = { 
+	//	0, 		// x position
+	//	768 / 2 // y position
+	//};
 
 
-Game::Game()
-{
-	mWindow = nullptr;
-	mIsRunning = true;
-	mBallPos = { 
-		1024 / 2, // x position
-		768 / 2   // y position
-	};
-	mPaddlePos = { 
-		0, 		// x position
-		768 / 2 // y position
-	};
-
-}
 
 bool Game::Initialize()
 {
@@ -56,23 +61,22 @@ bool Game::Initialize()
 		return false;
 	}
 	// Both window and SDL initialization creation are successful
+	mPaddlePos.x = 10.0f;
+	mPaddlePos.y = 768.0f / 2.0f;
+	mBallPos.x = 1024.0f / 2.0f;
+	mBallPos.y = 768.0f / 2.0f;
+	mBallVel.x = -200.0f;
+	mBallVel.y = 235.0f;
 	return true;
 }
 
-// Destroys SDL_Window and closes SDL
-void Game::Shutdown()
-{
-	SDL_DestroyRenderer(mRenderer);
-	SDL_DestroyWindow(mWindow);
-	SDL_Quit();
-}
 
 void Game::RunLoop()
 {
 	while (mIsRunning)
 	{
 		ProcessInput();
-		//UpdateGame();
+		UpdateGame();
 		GenerateOutput();
 	}
 }
@@ -87,9 +91,9 @@ void Game::ProcessInput()
 		switch (event.type)
 		{
 			// Handle different event types here
-		case SDL_QUIT:
-			mIsRunning = false;
-			break;
+			case SDL_QUIT:
+				mIsRunning = false;
+				break;
 		}
 	}
 
@@ -101,12 +105,104 @@ void Game::ProcessInput()
 	{
 		mIsRunning = false;
 	}
+
+	// Update paddle directionb ased on W/S keys
+	mPaddleDir = 0;
+	if (state[SDL_SCANCODE_W])
+	{
+		mPaddleDir -= 1;
+	}
+	if (state[SDL_SCANCODE_S])
+	{
+		mPaddleDir += 1;
+	}
 }
+
+void Game::UpdateGame()
+{
+	// Wait until 16ms has elapsed since last frame
+	while (!SDL_TICKS_PASSED(SDL_GetTicks(), mTicksCount + 16));
+
+	// Delta time is the difference in ticks from last frame
+	// (converted to seconds)
+	float deltaTime = (SDL_GetTicks() - mTicksCount) / 1000.0f;
+
+	// Clamp maximum delta time value
+	if (deltaTime > 0.05f)
+	{
+		deltaTime = 0.05f;
+	}
+	if (mPaddleDir != 0)
+	{
+
+		// Update teh y position of the paddle based on the direction
+		// 300.0f pixels/second
+		mPaddlePos.y += mPaddleDir * 300.0f * deltaTime;
+
+		// Make sure paddle doesn't move off screen!
+		if (mPaddlePos.y < (paddleH / 2.0f + thickness))
+		{
+			mPaddlePos.y = paddleH / 2.0f + thickness;
+		}
+		else if (mPaddlePos.y > (768.0f - paddleH / 2.0f - thickness))
+		{
+			mPaddlePos.y = 768.0f - paddleH / 2.0f - thickness;
+		}
+	}
+
+	mBallPos.x += mBallVel.x * deltaTime;
+	mBallPos.y += mBallVel.y * deltaTime;
+
+
+	// Is the ball overlapping with the paddle to interact?
+	float diff = mPaddlePos.y - mBallPos.y;
+	// Take the absolute value of the difference
+	diff = (diff > 0.0f) ? diff : -diff;
+
+	if (
+		// Our y-difference is small enough
+		diff <= paddleH / 2.0f &&
+		// Ball is at the correct x-position
+		mBallPos.x <= 25.0f && mBallPos.x >= 20.0f &&
+
+		// The ball is moving to the left
+		mBallVel.x < 0.0f
+		)
+	{
+		mBallVel.x *= -1.0f;
+	}
+	// Did the ball go off screen? (if so end the game)
+	else if (mBallPos.x <= 0.0f)
+	{
+		mIsRunning = false;
+	}
+
+	// Did the ball collide with the top wall?
+	if (mBallPos.y <= thickness && mBallVel.y < 0.0f)
+	{
+		// Then go downwards
+		mBallVel.y *= -1;
+	}
+	// Did the ball collide with the bottom wall?
+
+	else if (mBallPos.y >= (768 - thickness) && mBallVel.y > 0.0f)
+	{
+		// Then go upwards
+		mBallVel.y *= -1;
+	}
+	// did the ball collide with the right wall?
+	else if (mBallPos.x >= (1024 - thickness) && mBallVel.x > 0.0f)
+	{
+		mBallVel.x *= -1;
+	}
+}
+
 
 void Game::GenerateOutput()
 {
 	
-	SDL_SetRenderDrawColor(mRenderer,
+	SDL_SetRenderDrawColor(
+		mRenderer,
 		0,   // R
 		0,   // G
 		255, // B
@@ -116,47 +212,35 @@ void Game::GenerateOutput()
 	// CLear the back buffer
 	SDL_RenderClear(mRenderer);
 
-	// Swap the front and back buffers
-	SDL_RenderPresent(mRenderer);
+	//// Swap the front and back buffers
+	//SDL_RenderPresent(mRenderer);
 
-	// Setting the color to white
+	// Draw walls 
 	SDL_SetRenderDrawColor(mRenderer, 255, 255, 255, 255);
 
-	// Create a rectangle object SDL_Rect to reference to.
+	// Draw top wall
 	SDL_Rect wall{
 		0,				// Top Left x
 		0,				// Top left y
 		1024,			// Width
 		thickness		// Height
 	};
-
-	// Draw the top border
 	SDL_RenderFillRect(mRenderer, &wall);
 
-	// Configure bottom border
-	wall = {
-		0,
-		768 - thickness,
-		1024,
-		thickness
-	};
-	// Draw Bottom border
+	// Draw bottom wall
+	wall.y = 768 - thickness;
 	SDL_RenderFillRect(mRenderer, &wall);
 	
-	// Configure right border
+	// Draw right wall
 	wall = {
-		1024-thickness,
+		1024 - thickness,
 		0,
 		thickness,
-		768
+		1024
 	};
-	// Draw right border
 	SDL_RenderFillRect(mRenderer, &wall);
 
-	
-
-
-	// Create a ball object
+	// Draw a ball object
 	SDL_Rect ball{
 		static_cast<int>(mBallPos.x - thickness / 2),
 		static_cast<int>(mBallPos.y - thickness / 2),
@@ -165,13 +249,27 @@ void Game::GenerateOutput()
 	};
 	SDL_RenderFillRect(mRenderer, &ball);
 
+	// Draw Paddle
 	SDL_Rect paddle{
-		static_cast<int>(mPaddlePos.x + thickness), // x position
-		static_cast<int>(mPaddlePos.y - thickness / 2),	// y position
+		static_cast<int>(mPaddlePos.x), // x position
+		static_cast<int>(mPaddlePos.y - paddleH/ 2),	// y position
 		thickness,										// width
-		100												// height
+		static_cast<int>(paddleH)						// height
 	};
 	SDL_RenderFillRect(mRenderer, &paddle);
+
+
+	// Swap front buffer and back buffer
 	SDL_RenderPresent(mRenderer);
 
+}
+
+
+
+// Destroys SDL_Window and closes SDL
+void Game::Shutdown()
+{
+	SDL_DestroyRenderer(mRenderer);
+	SDL_DestroyWindow(mWindow);
+	SDL_Quit();
 }
